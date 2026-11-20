@@ -9,7 +9,7 @@ a = Analysis(
     ["launcher.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[("abikaraoke/assets/fonts", "abikaraoke/assets/fonts")],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

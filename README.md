@@ -90,7 +90,42 @@ Current status: **63 passed**.
 
 ## Install
 
-### 1. FFmpeg (required)
+### Windows: the easy way (nothing else to install)
+
+Download **`ABI-Karaoke-Setup-1.1.0.exe`** and double-click it. That is the whole
+install procedure.
+
+The setup program is self-contained. It bundles everything the app needs, so the
+target machine does **not** need Python, FFmpeg, whisper.cpp, or any Indic fonts:
+
+| Bundled | Why it matters |
+| --- | --- |
+| Python 3.11 (embedded) | no Python install, no `pip`, no PATH edits |
+| PySide6 6.7.3 + Qt 6 | the desktop UI |
+| FFmpeg + FFprobe | decoding, the `ass` karaoke filter, encoding |
+| whisper.cpp `whisper-cli.exe` | AI sync works out of the box |
+| Noto Devanagari / Malayalam / Tamil | lyrics render in the right script |
+| the app itself | `abikaraoke` package + launchers |
+
+It installs per-user to `%LOCALAPPDATA%\Programs\ABI Karaoke`, so there is no
+UAC prompt and no administrator password. You get a Start Menu folder, a Desktop
+shortcut, and a proper entry in *Add or remove programs* with a working
+uninstaller.
+
+The only optional step is the speech model (~142 MB, downloaded once). The
+installer offers it as a checkbox, ticked by default; if you skip it, run
+**Start Menu → ABI Karaoke → Setup AI (one time)** later. Until the model is
+present, lyrics still work — they come from LRCLIB — and vocals are still removed
+with the center-cancel fallback.
+
+### Windows: portable ZIP
+
+If you would rather not install anything, unpack the portable ZIP anywhere and
+run `ABI Karaoke.vbs`. Same bundle, no registry entries, no shortcuts.
+
+### Any platform: from source
+
+#### 1. FFmpeg (required)
 
 Download a *full* build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) or
 [BtbN](https://github.com/BtbN/FFmpeg-Builds), then either add its `bin` folder
@@ -103,7 +138,7 @@ ABI_FFPROBE=C:\ffmpeg\bin\ffprobe.exe
 
 The build must include libass (the `ass` filter). The full builds do.
 
-### 2. The app
+#### 2. The app
 
 ```bash
 git clone https://github.com/ashokthrissur-cmd/karaokeking.git
@@ -112,7 +147,7 @@ python -m pip install -r requirements.txt      # PySide6 UI
 python -m pip install -r requirements-ai.txt   # optional: Demucs + faster-whisper
 ```
 
-### 3. Verify
+#### 3. Verify
 
 ```bash
 python -m abikaraoke doctor
@@ -128,6 +163,15 @@ python -m abikaraoke doctor
 ```
 
 `MISS` is not fatal: the center-cancel and Smart Sync fallbacks still work.
+
+If `whisper.cpp` is missing, let the app fetch it:
+
+```bash
+python -m abikaraoke setup --model base
+```
+
+That downloads `whisper-cli.exe` (~20 MB) and the `ggml-base.bin` model
+(~142 MB) into the app's data directory, then AI sync is available offline.
 
 ---
 
@@ -253,15 +297,22 @@ transport, alignment monotonicity and synthetic flags, ASS escaping, workspace
 provenance, Goertzel-verified separation, real FFmpeg rendering, the full
 pipeline, and a headless Qt smoke test.
 
-### Build the Windows executable and installer
+### Build the Windows installer
 
-```powershell
-pyinstaller --noconfirm --clean abikaraoke.spec
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "installer\KaraokeForge.iss"
+The installer is built from the portable bundle, which is assembled by a script
+so the result is reproducible:
+
+```bash
+python build/build_portable.py          # -> dist/ABI Karaoke/
+makensis installer/ABIKaraoke.nsi       # -> dist/ABI-Karaoke-Setup-1.1.0.exe
 ```
 
-GitHub Actions does this automatically on every push and pull request; see
-`.github/workflows/windows-ci.yml`.
+`build_portable.py` downloads CPython 3.11.9 (embeddable), PySide6-Essentials
+6.7.3 win_amd64 wheels, FFmpeg essentials and the whisper.cpp Windows release,
+then lays them out with a `python311._pth` and four launchers. `makensis` works
+on Linux and Windows alike, so no Windows machine is required to produce the
+`.exe`. An Inno Setup script is also kept at `installer/ABIKaraoke.iss` for
+people who prefer it.
 
 ---
 

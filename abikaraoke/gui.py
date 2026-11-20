@@ -25,9 +25,16 @@ from .alignment import align_lyrics
 from .ass import KaraokeStyle
 from .config import AppConfig
 from .lrc import parse_lrc, parse_plain, to_lrc
-from .lyrics import LyricsError, fetch_lyrics
+from .lyrics import (
+    LyricsError,
+    fetch_lyrics,
+    fetch_lyrics_multi,
+    lyrics_from_candidate,
+    search_lyrics,
+)
 from .media import extract_audio, probe
 from .models import Lyrics
+from .naming import guess_from_path
 from .pipeline import PipelineError, PipelineOptions, run_pipeline
 from .render import RenderSettings
 from .separation import separate
@@ -49,6 +56,8 @@ def launch(config: Optional[AppConfig] = None) -> int:
             QApplication,
             QCheckBox,
             QComboBox,
+            QDialog,
+            QDialogButtonBox,
             QFileDialog,
             QFormLayout,
             QFrame,
@@ -428,8 +437,22 @@ def launch(config: Optional[AppConfig] = None) -> int:
                 return
             self.source = Path(path)
             self.song_path.setText(path)
-            if not self.title_edit.text().strip():
-                self.title_edit.setText(self.source.stem)
+            # Parse the file name instead of dumping it into the title box.
+            # Downloads are full of "HD video song" noise that makes every
+            # lyric lookup miss.
+            guess = guess_from_path(path)
+            if guess.title:
+                self.title_edit.setText(guess.title)
+            if guess.artist:
+                self.artist_edit.setText(guess.artist)
+            if guess.title:
+                detail = f"Detected title “{guess.title}”"
+                if guess.artist:
+                    detail += f" by {guess.artist}"
+                detail += f" (confidence {int(guess.confidence * 100)}%)."
+                if guess.confidence < 0.6:
+                    detail += " Edit the fields if this is wrong."
+                self._log(detail)
             self._log(f"Selected {self.source.name}.")
 
         def _set_busy(self, busy: bool) -> None:
@@ -476,35 +499,143 @@ def launch(config: Optional[AppConfig] = None) -> int:
             return parse_plain(text)
 
         def _fetch_lyrics(self) -> None:
-            title = self.title_edit.text().strip() or (
-                self.source.stem if self.source else ""
-            )
+            title = self.title_edit.text().strip()
             artist = self.artist_edit.text().strip()
+            if not title and self.source:
+                guess = guess_from_path(self.source)
+                title, artist = guess.title, guess.artist or artist
+                self.title_edit.setText(title)
+                if artist:
+                    self.artist_edit.setText(artist)
             if not title:
                 QMessageBox.warning(self, APP_NAME, "Enter a title or choose a file first.")
                 return
-            self._log(f"Looking up “{title}” on LRCLIB…")
+
+            queries = []
+            if artist and title:
+                queries.append(f"{artist} - {title}")
+            queries.append(title)
+            if self.source:
+                queries.extend(guess_from_path(self.source).search_queries())
+            seen, ordered = set(), []
+            for q in queries:
+                if q and q.casefold() not in seen:
+                    seen.add(q.casefold())
+                    ordered.append(q)
+
+            self._log(f"Looking up {title!r} on LRCLIB (trying {len(ordered)} spelling(s))...")
             try:
-                lyrics = fetch_lyrics(
-                    artist,
-                    title,
+                lyrics = fetch_lyrics_multi(
+                    ordered,
                     duration=None,
                     timeout=config.lyrics_timeout,
                     retries=config.lyrics_retries,
                     cache_dir=Path(config.data_dir) / "lyrics-cache",
                 )
             except LyricsError as exc:
-                self._log(f"Lyrics lookup failed: {exc}")
-                QMessageBox.warning(self, "Lyrics not found", str(exc))
+                self._log(f"Automatic lookup failed: {exc}")
+                self._search_lyrics_dialog(f"{artist} {title}".strip() or title)
                 return
 
+            self._apply_lyrics(lyrics)
+
+        def _apply_lyrics(self, lyrics: Lyrics) -> None:
             self.lyrics = lyrics
-            self.lyrics_edit.setPlainText(to_lrc(lyrics) if lyrics.synced else "\n".join(
-                line.text for line in lyrics.sorted_lines()
-            ))
+            self.lyrics_edit.setPlainText(
+                to_lrc(lyrics) if lyrics.synced
+                else "\n".join(line.text for line in lyrics.sorted_lines())
+            )
             state = "synced" if lyrics.synced else "plain (needs timing)"
-            self.lyrics_status.setText(f"{len(lyrics.lines)} lines · {state} · {lyrics.source}")
-            self._log(f"Loaded {len(lyrics.lines)} lines ({state}).")
+            self.lyrics_status.setText(
+                f"{len(lyrics.lines)} lines - {state} - {lyrics.source}"
+            )
+            self._log(f"Loaded {len(lyrics.lines)} lines ({state}) from {lyrics.source}.")
+
+        def _search_lyrics_dialog(self, initial_query: str) -> None:
+            """Manual LRCLIB search so a miss is never a dead end."""
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Search lyrics")
+            dialog.resize(640, 420)
+            layout = QVBoxLayout(dialog)
+
+            hint = QLabel(
+                "Automatic matching failed. Search LRCLIB by title or artist and "
+                "pick the correct record."
+            )
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
+
+            row = QHBoxLayout()
+            query_edit = QLineEdit(initial_query)
+            search_button = QPushButton("Search")
+            row.addWidget(query_edit, 1)
+            row.addWidget(search_button)
+            layout.addLayout(row)
+
+            results = QListWidget()
+            layout.addWidget(results, 1)
+            status = QLabel("")
+            status.setStyleSheet("color:#9aa3b5;")
+            layout.addWidget(status)
+
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            ok_button = buttons.button(QDialogButtonBox.Ok)
+            ok_button.setText("Use selected lyrics")
+            ok_button.setEnabled(False)
+            layout.addWidget(buttons)
+
+            found: list = []
+
+            def do_search() -> None:
+                results.clear()
+                found.clear()
+                ok_button.setEnabled(False)
+                status.setText("Searching...")
+                try:
+                    candidates = search_lyrics(
+                        query_edit.text(),
+                        timeout=config.lyrics_timeout,
+                        retries=config.lyrics_retries,
+                    )
+                except LyricsError as exc:
+                    status.setText(str(exc))
+                    return
+                if not candidates:
+                    status.setText("No records matched. Try fewer words.")
+                    return
+                found.extend(candidates)
+                for candidate in candidates:
+                    kind = "synced" if candidate.has_synced else "plain"
+                    minutes = int(candidate.duration // 60)
+                    seconds = int(candidate.duration % 60)
+                    results.addItem(
+                        f"{candidate.title} - {candidate.artist} "
+                        f"({minutes}:{seconds:02d}, {kind})"
+                    )
+                status.setText(f"{len(candidates)} result(s). Pick one and press OK.")
+
+            def on_row(row_index: int) -> None:
+                ok_button.setEnabled(row_index >= 0)
+
+            search_button.clicked.connect(do_search)
+            query_edit.returnPressed.connect(do_search)
+            results.currentRowChanged.connect(on_row)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+
+            if initial_query:
+                do_search()
+
+            if dialog.exec() == QDialog.Accepted:
+                row_index = results.currentRow()
+                if 0 <= row_index < len(found):
+                    try:
+                        lyrics = lyrics_from_candidate(found[row_index])
+                    except LyricsError as exc:
+                        QMessageBox.warning(self, "Lyrics", str(exc))
+                        return
+                    self._apply_lyrics(lyrics)
 
         def _load_lyrics_file(self) -> None:
             path, _ = QFileDialog.getOpenFileName(
@@ -529,6 +660,9 @@ def launch(config: Optional[AppConfig] = None) -> int:
                 QMessageBox.warning(self, APP_NAME, "Fetch or paste lyrics before syncing.")
                 return
 
+            if not self._ensure_ai_ready():
+                return
+
             self.cancel_event = threading.Event()
             self._set_busy(True)
             self._log("AI auto-sync started.")
@@ -539,6 +673,86 @@ def launch(config: Optional[AppConfig] = None) -> int:
             worker.finished.connect(lambda: self._set_busy(False))
             self.worker = worker
             worker.start()
+
+        def _ensure_ai_ready(self) -> bool:
+            """Offer to download what AI sync needs instead of failing outright."""
+
+            from .provision import MODEL_SIZES_MB, ensure_whisper_cli, ensure_whisper_model
+            from .transcription import faster_whisper_available, whisper_cpp_available
+
+            if faster_whisper_available():
+                return True
+            if whisper_cpp_available(config):
+                return True
+
+            answer = QMessageBox.question(
+                self,
+                "AI sync needs a model",
+                "No speech-recognition backend is installed yet.\n\n"
+                f"Download the whisper.cpp 'base' model (~{MODEL_SIZES_MB['base']} MB) now?\n"
+                "It is a one-time download and makes AI sync work offline.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if answer != QMessageBox.Yes:
+                self._log(
+                    "AI sync skipped: no ASR backend. Install with "
+                    "'pip install faster-whisper' or run 'abikaraoke setup'."
+                )
+                return False
+
+            self._log("Downloading whisper model (one time)...")
+            try:
+                path = ensure_whisper_model(
+                    config.data_dir,
+                    "base",
+                    progress=lambda done, total: self._log(
+                        f"  model {done // 1048576} MB"
+                        + (f" / {total // 1048576} MB" if total else "")
+                    ) if done % (8 * 1048576) < 1048576 else None,
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Download failed", str(exc))
+                self._log(f"Model download failed: {exc}")
+                return False
+
+            self._log(f"Model ready: {path}")
+            if whisper_cpp_available(config):
+                return True
+
+            # The model alone is useless without whisper-cli, so fetch it too.
+            self._log("Downloading the whisper.cpp speech engine (~20 MB)...")
+            try:
+                cli = ensure_whisper_cli(config.data_dir)
+                self._log(f"Speech engine ready: {cli}")
+            except Exception as exc:
+                self._log(f"Speech engine download failed: {exc}")
+            if whisper_cpp_available(config):
+                return True
+
+            # The model alone is useless without whisper-cli; fall back to
+            # faster-whisper, which pip can install.
+            answer = QMessageBox.question(
+                self,
+                "whisper.cpp not found",
+                "The model downloaded, but whisper-cli is not installed.\n\n"
+                "Install faster-whisper instead? (~200 MB, works without a separate binary.)",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if answer != QMessageBox.Yes:
+                return False
+            import subprocess
+            import sys as _sys
+            try:
+                subprocess.run(
+                    [_sys.executable, "-m", "pip", "install", "faster-whisper"],
+                    check=True,
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Install failed", str(exc))
+                return False
+            return faster_whisper_available()
 
         def _sync_done(self, payload: object) -> None:
             data = payload  # type: ignore[assignment]

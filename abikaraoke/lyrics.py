@@ -242,3 +242,93 @@ def _lyrics_from_payload(payload: Dict[str, Any], artist: str, title: str, sourc
         lyrics.warnings.append("LRCLIB returned plain lyrics without timestamps.")
         return lyrics
     raise LyricsNotFound("LRCLIB record contains no usable lyric text.")
+
+
+def search_lyrics(
+    query: str,
+    *,
+    timeout: float = 12.0,
+    retries: int = 2,
+    limit: int = 25,
+) -> List[LyricCandidate]:
+    """Free-text LRCLIB search, newest-relevance first.
+
+    Used by the UI when automatic matching fails, so the user can pick the
+    right record instead of being told "no lyrics found".
+    """
+
+    query = (query or "").strip()
+    if not query:
+        raise LyricsError("Type something to search for.")
+
+    url = f"{BASE_URL}/search?{urllib.parse.urlencode({'q': query})}"
+    results = _request_json(url, timeout, retries)
+    if not isinstance(results, list):
+        raise LyricsError("LRCLIB returned an unexpected search response.")
+
+    candidates = [_candidate_from(item) for item in results if isinstance(item, dict)]
+    candidates = [c for c in candidates if (c.has_synced or c.plain) and not c.instrumental]
+    # Synced records first, then by how well the text matches the query.
+    candidates.sort(key=lambda c: (not c.has_synced, -_similarity(f"{c.artist} {c.title}", query)))
+    return candidates[:limit]
+
+
+def lyrics_from_candidate(candidate: LyricCandidate) -> Lyrics:
+    """Convert a user-picked search result into a :class:`Lyrics` object."""
+
+    payload = {
+        "trackName": candidate.title,
+        "artistName": candidate.artist,
+        "duration": candidate.duration,
+        "syncedLyrics": candidate.synced,
+        "plainLyrics": candidate.plain,
+        "instrumental": candidate.instrumental,
+    }
+    return _lyrics_from_payload(payload, candidate.artist, candidate.title, source="lrclib")
+
+
+def fetch_lyrics_multi(
+    queries: List[str],
+    *,
+    duration: Optional[float] = None,
+    timeout: float = 12.0,
+    retries: int = 2,
+    cache_dir: Optional[Path] = None,
+    allow_plain: bool = True,
+) -> Lyrics:
+    """Try several query spellings before giving up.
+
+    A file name like "Aaja Re Pardesi - HD video song" yields several plausible
+    queries; LRCLIB often matches one of them even when the first misses.
+    """
+
+    cleaned = [q.strip() for q in queries if q and q.strip()]
+    if not cleaned:
+        raise LyricsError("Enter a track title before fetching lyrics.")
+
+    errors: List[str] = []
+    for query in cleaned:
+        # Split "Artist Title" back into the two fields LRCLIB prefers.
+        artist, title = "", query
+        if " - " in query:
+            artist, title = (part.strip() for part in query.split(" - ", 1))
+        try:
+            return fetch_lyrics(
+                artist,
+                title,
+                duration=duration,
+                timeout=timeout,
+                retries=retries,
+                cache_dir=cache_dir,
+                allow_plain=allow_plain,
+            )
+        except LyricsNotFound as exc:
+            errors.append(str(exc))
+        except LyricsError as exc:
+            # Network trouble will not be fixed by another spelling.
+            raise
+
+    raise LyricsNotFound(
+        "No LRCLIB match for: " + ", ".join(repr(q) for q in cleaned)
+        + ". Use 'Search lyrics' to pick a record manually."
+    )

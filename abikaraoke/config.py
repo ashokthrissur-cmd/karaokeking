@@ -41,6 +41,34 @@ def _first_existing(candidates: List[Optional[str]]) -> Optional[str]:
     return None
 
 
+def _bundled_tool(name: str, subdir: str = "ffmpeg") -> Optional[str]:
+    """Look for a tool shipped next to the app (portable/Windows bundle).
+
+    Layouts we support::
+
+        <app>/ffmpeg/ffmpeg.exe          (portable bundle)
+        <app>/bin/ffmpeg.exe
+        <app>/../ffmpeg/bin/ffmpeg.exe   (development checkout)
+        <app>/whisper/whisper-cli.exe    (bundled whisper.cpp)
+    """
+
+    exe = f"{name}.exe" if os.name == "nt" else name
+    here = Path(__file__).resolve().parent
+    roots = [here, here.parent, here.parent.parent]
+    relative = [
+        Path(subdir) / exe,
+        Path("bin") / exe,
+        Path(subdir) / "bin" / exe,
+        Path("vendor") / subdir / exe,
+    ]
+    for root in roots:
+        for rel in relative:
+            candidate = root / rel
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 @dataclass
 class AppConfig:
     data_dir: str = field(default_factory=lambda: str(default_data_dir()))
@@ -96,11 +124,15 @@ class AppConfig:
 
     # -- tool checks -----------------------------------------------------
     def resolve_ffmpeg(self) -> Optional[str]:
-        self.ffmpeg = self.ffmpeg or (_first_existing(["ffmpeg"]) or "")
+        self.ffmpeg = self.ffmpeg or (
+            _first_existing([_bundled_tool("ffmpeg"), "ffmpeg"]) or ""
+        )
         return self.ffmpeg or None
 
     def resolve_ffprobe(self) -> Optional[str]:
-        self.ffprobe = self.ffprobe or (_first_existing(["ffprobe"]) or "")
+        self.ffprobe = self.ffprobe or (
+            _first_existing([_bundled_tool("ffprobe"), "ffprobe"]) or ""
+        )
         return self.ffprobe or None
 
     def resolve_demucs_python(self) -> Optional[str]:
@@ -133,6 +165,12 @@ class AppConfig:
         candidates = [
             self.whisper_cli,
             os.environ.get("WHISPER_CLI"),
+            # Bundled with the Windows installer / portable build.
+            _bundled_tool("whisper-cli"),
+            _bundled_tool("whisper-cli", "whisper"),
+            # Downloaded on demand by ``abikaraoke setup``.
+            str(Path(self.data_dir) / "tools" / "whisper" / "whisper-cli.exe"),
+            str(Path(self.data_dir) / "tools" / "whisper" / "whisper-cli"),
             "whisper-cli",
             "whisper-cli.exe",
             "main.exe",
