@@ -35,6 +35,9 @@ Issues = "https://github.com/ashokthrissur-cmd/karaokeking/issues"
 [tool.setuptools]
 packages = ["abikaraoke"]
 
+[tool.setuptools.package-data]
+abikaraoke = ["assets/fonts/*.ttf", "assets/fonts/*.otf", "assets/fonts/LICENSE*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

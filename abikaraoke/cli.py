@@ -57,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="Check FFmpeg, Demucs, ASR and GUI availability")
     sub.add_parser("gui", help="Launch the desktop UI")
 
+    setup_p = sub.add_parser("setup", help="Download the AI model so sync works offline")
+    setup_p.add_argument("--model", default="base", choices=["tiny", "base", "small"])
+    setup_p.add_argument("--install-extras", action="store_true",
+                         help="Also pip install faster-whisper and demucs (large download)")
+
     separate_p = sub.add_parser("separate", help="Remove vocals from a song")
     separate_p.add_argument("source")
     separate_p.add_argument("--method", default="auto", choices=["auto", "demucs", "center", "none"])
@@ -122,6 +127,36 @@ def main(argv: Optional[List[str]] = None) -> int:
             for item in config.doctor():
                 mark = "OK  " if item["status"] == "ok" else "MISS"
                 print(f"[{mark}] {item['name']}: {item['detail']}")
+            return 0
+
+        if args.command == "setup":
+            from .provision import (
+                MODEL_SIZES_MB,
+                ensure_whisper_cli,
+                ensure_whisper_model,
+            )
+
+            size = args.model
+            print(f"Downloading whisper.cpp model '{size}' "
+                  f"(~{MODEL_SIZES_MB[size]} MB) into {config.data_dir} ...")
+
+            def report(done: int, total: int) -> None:
+                if total:
+                    print(f"  {done * 100 // total:3d}%  ({done // 1048576} MB)", end="\r", flush=True)
+
+            path = ensure_whisper_model(config.data_dir, size, progress=report)
+            print(f"\nModel ready: {path}")
+
+            print("Fetching whisper.cpp (the speech engine, ~20 MB) ...")
+            cli_path = ensure_whisper_cli(config.data_dir, progress=report)
+            print(f"\nSpeech engine ready: {cli_path}")
+            if args.install_extras:
+                import subprocess
+                import sys as _sys
+                print("Installing faster-whisper and demucs (this can take a while)...")
+                subprocess.run([_sys.executable, "-m", "pip", "install",
+                                "faster-whisper", "demucs"], check=False)
+            print("\nRun 'abikaraoke doctor' to confirm.")
             return 0
 
         if args.command == "gui":

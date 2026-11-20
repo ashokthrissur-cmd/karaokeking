@@ -55,18 +55,18 @@ jobs:
           & $exe --version
           if ($LASTEXITCODE -ne 0) { throw "Frozen exe failed --version" }
 
-      - name: Install Inno Setup compiler
+      - name: Install NSIS
         shell: pwsh
-        run: choco install innosetup --yes --no-progress
+        run: choco install nsis --yes --no-progress
 
-      - name: Build Windows installer
+      - name: Assemble the self-contained portable bundle
+        shell: pwsh
+        run: python build/build_portable.py --zip
+
+      - name: Build the Windows installer
         shell: pwsh
         run: |
-          $version = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"$').Matches.Groups[1].Value
-          if (-not $version) { throw "pyproject.toml has no version." }
-          $compiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
-          & $compiler "/DAppVersion=$version" "installer/KaraokeForge.iss"
+          makensis -V2 installer/ABIKaraoke.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload executable and installer
@@ -75,6 +75,7 @@ jobs:
           name: ABI-Karaoke-windows-x64
           path: |
             dist/ABI_Karaoke.exe
-            publish/installer/ABI_Karaoke_Setup_*_x64.exe
+            dist/ABI-Karaoke-Setup-*.exe
+            dist/ABI-Karaoke-Portable.zip
           if-no-files-found: error
           retention-days: 30

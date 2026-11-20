@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from .ass import KaraokeStyle, write_ass
+from .fonts import bundled_fonts_dir, choose_font
 from .config import AppConfig
 from .media import decode_test, ffmpeg_filter_path, probe
 from .models import Lyrics, RenderResult
@@ -96,14 +97,35 @@ def render_video(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ass_path = output_path.with_suffix(".ass")
-    write_ass(ass_path, lyrics, settings.style)
+
+    # Choose a font that can draw the actual lyrics.  A hard-coded Latin font
+    # turns Malayalam/Tamil/Devanagari lines into empty boxes.
+    style = settings.style
+    if style.font == KaraokeStyle().font:
+        sample = " ".join(line.text for line in lyrics.lines[:20])
+        chosen, font_warnings = choose_font(sample, default=style.font)
+        if chosen != style.font:
+            style.font = chosen
+            progress(f"Using font '{chosen}' for the lyric script.")
+        for warning in font_warnings:
+            lyrics.warnings.append(warning)
+            progress(f"Warning: {warning}")
+
+    write_ass(ass_path, lyrics, style)
     progress(f"Wrote {ass_path.name} ({len(lyrics.lines)} lines).")
 
     background = _background_args(settings, duration)
+    # Point libass at the bundled fonts so Malayalam/Tamil/Devanagari lyrics
+    # render correctly even when Windows has no Indic fonts installed.
+    ass_filter = f"ass='{ffmpeg_filter_path(ass_path)}'"
+    fonts_dir = bundled_fonts_dir()
+    if fonts_dir:
+        ass_filter += f":fontsdir='{ffmpeg_filter_path(fonts_dir)}'"
+
     filter_chain = (
         f"[0:v]scale={settings.width}:{settings.height}:force_original_aspect_ratio=increase,"
         f"crop={settings.width}:{settings.height},setsar=1[bg];"
-        f"[bg]ass='{ffmpeg_filter_path(ass_path)}'[v]"
+        f"[bg]{ass_filter}[v]"
     )
 
     command = [
