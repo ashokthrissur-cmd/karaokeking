@@ -18,7 +18,7 @@ SetCompressorDictSize 32
 !include "LogicLib.nsh"
 
 !define APP_NAME     "ABI Karaoke"
-!define APP_VERSION  "1.1.0"
+!define APP_VERSION  "1.1.1"
 !define APP_PUBLISHER "ABI Karaoke"
 !define APP_URL      "https://github.com/ashokthrissur-cmd/karaokeking"
 !define APP_EXE      "ABI Karaoke.vbs"
@@ -32,7 +32,7 @@ InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallDir"
 RequestExecutionLevel user          ; per-user install: no admin prompt
 BrandingText "${APP_NAME} ${APP_VERSION}"
 
-VIProductVersion "1.1.0.0"
+VIProductVersion "1.1.1.0"
 VIAddVersionKey "ProductName"     "${APP_NAME}"
 VIAddVersionKey "ProductVersion"  "${APP_VERSION}"
 VIAddVersionKey "FileDescription" "${APP_NAME} Setup"
@@ -99,6 +99,8 @@ Section "Start Menu shortcuts" SEC_SM
     "$INSTDIR\Setup AI.bat" "" "$INSTDIR\app.ico" 0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Check installation.lnk" \
     "$INSTDIR\Doctor.bat" "" "$INSTDIR\app.ico" 0
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\Troubleshoot.lnk" \
+    "$INSTDIR\Troubleshoot.bat" "" "$INSTDIR\app.ico" 0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk" \
     "$INSTDIR\Uninstall.exe" "" "$INSTDIR\app.ico" 0
 SectionEnd
@@ -162,6 +164,7 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Setup AI (one time).lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Check installation.lnk"
+  Delete "$SMPROGRAMS\${APP_NAME}\Troubleshoot.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk"
   RMDir  "$SMPROGRAMS\${APP_NAME}"
 

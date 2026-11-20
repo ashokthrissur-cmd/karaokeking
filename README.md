@@ -92,7 +92,7 @@ Current status: **63 passed**.
 
 ### Windows: the easy way (nothing else to install)
 
-Download **`ABI-Karaoke-Setup-1.1.0.exe`** and double-click it. That is the whole
+Download **`ABI-Karaoke-Setup-1.1.1.exe`** and double-click it. That is the whole
 install procedure.
 
 The setup program is self-contained. It bundles everything the app needs, so the
@@ -304,7 +304,7 @@ so the result is reproducible:
 
 ```bash
 python build/build_portable.py          # -> dist/ABI Karaoke/
-makensis installer/ABIKaraoke.nsi       # -> dist/ABI-Karaoke-Setup-1.1.0.exe
+makensis installer/ABIKaraoke.nsi       # -> dist/ABI-Karaoke-Setup-1.1.1.exe
 ```
 
 `build_portable.py` downloads CPython 3.11.9 (embeddable), PySide6-Essentials
