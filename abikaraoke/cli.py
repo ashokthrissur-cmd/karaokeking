@@ -275,6 +275,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 130
     except Exception as exc:
         print(f"\nError: {exc}", file=sys.stderr)
+        if args.command == "gui":
+            # pythonw.exe has no console, so a printed error is invisible.
+            # Show a native dialog so a failed launch is never silent.
+            try:
+                from .__main__ import _show_error
+
+                _show_error(f"ABI Karaoke could not start.\n\n{exc}")
+            except Exception:
+                pass
         return 1
 
 

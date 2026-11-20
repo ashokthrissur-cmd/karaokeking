@@ -18,10 +18,15 @@ SetCompressorDictSize 32
 !include "LogicLib.nsh"
 
 !define APP_NAME     "ABI Karaoke"
-!define APP_VERSION  "1.1.1"
+!define APP_VERSION  "1.1.2"
 !define APP_PUBLISHER "ABI Karaoke"
 !define APP_URL      "https://github.com/ashokthrissur-cmd/karaokeking"
-!define APP_EXE      "ABI Karaoke.vbs"
+; Launch through pythonw.exe directly.  Windows 11 24H2 ships with Windows
+; Script Host (VBScript) disabled by default, so a .vbs launcher silently does
+; nothing when double-clicked.  pythonw.exe is always available and the app
+; itself reports any startup failure in a native message box.
+!define APP_EXE      "pythonw.exe"
+!define APP_ARGS     "-m abikaraoke gui"
 !define APP_ID       "{8E2C4B1A-5D77-4C2E-9A31-6F0B7C3D9E21}"
 !define SOURCE_DIR   "..\..\build\portable\app"
 
@@ -32,7 +37,7 @@ InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallDir"
 RequestExecutionLevel user          ; per-user install: no admin prompt
 BrandingText "${APP_NAME} ${APP_VERSION}"
 
-VIProductVersion "1.1.1.0"
+VIProductVersion "1.1.2.0"
 VIAddVersionKey "ProductName"     "${APP_NAME}"
 VIAddVersionKey "ProductVersion"  "${APP_VERSION}"
 VIAddVersionKey "FileDescription" "${APP_NAME} Setup"
@@ -43,7 +48,7 @@ VIAddVersionKey "LegalCopyright"  "${APP_PUBLISHER}"
 !define MUI_ICON   "app.ico"
 !define MUI_UNICON "app.ico"
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\Launch.bat"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\Launch.lnk"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch ${APP_NAME} now"
 !define MUI_FINISHPAGE_LINK "Project page"
 !define MUI_FINISHPAGE_LINK_LOCATION "${APP_URL}"
@@ -67,6 +72,11 @@ Section "!${APP_NAME} (required)" SEC_MAIN
   ; The whole self-contained runtime: python.exe, Lib\site-packages,
   ; ffmpeg\, whisper\, abikaraoke\ and the launchers.
   File /r "${SOURCE_DIR}\*.*"
+
+  ; A stable launcher entry point used by the finish page and by users who
+  ; prefer a shortcut over the Start Menu.
+  CreateShortcut "$INSTDIR\Launch.lnk" "$INSTDIR\${APP_EXE}" "${APP_ARGS}" \
+    "$INSTDIR\app.ico" 0 SW_SHOWNORMAL "" "Karaoke videos from any song"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
@@ -94,7 +104,7 @@ Section "Start Menu shortcuts" SEC_SM
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
 
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
-    "$SYSDIR\wscript.exe" '"$INSTDIR\${APP_EXE}"' "$INSTDIR\app.ico" 0 SW_SHOWNORMAL "" "Karaoke videos from any song"
+    "$INSTDIR\${APP_EXE}" "${APP_ARGS}" "$INSTDIR\app.ico" 0 SW_SHOWNORMAL "" "Karaoke videos from any song"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Setup AI (one time).lnk" \
     "$INSTDIR\Setup AI.bat" "" "$INSTDIR\app.ico" 0
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\Check installation.lnk" \
@@ -108,7 +118,7 @@ SectionEnd
 Section "Desktop shortcut" SEC_DESKTOP
   SetShellVarContext current
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" \
-    "$SYSDIR\wscript.exe" '"$INSTDIR\${APP_EXE}"' "$INSTDIR\app.ico" 0 SW_SHOWNORMAL "" "Karaoke videos from any song"
+    "$INSTDIR\${APP_EXE}" "${APP_ARGS}" "$INSTDIR\app.ico" 0 SW_SHOWNORMAL "" "Karaoke videos from any song"
 SectionEnd
 
 Section "AI speech model (~142 MB download)" SEC_MODEL
@@ -181,6 +191,7 @@ Section "Uninstall"
   Delete   "$INSTDIR\*.bat"
   Delete   "$INSTDIR\*.vbs"
   Delete   "$INSTDIR\*.ico"
+  Delete   "$INSTDIR\*.lnk"
   Delete   "$INSTDIR\*.txt"
   RMDir /r "$INSTDIR"
 
