@@ -164,3 +164,24 @@ def test_whisper_and_ffmpeg_are_bundled():
     assert (BUNDLE / "ffmpeg" / "ffmpeg.exe").is_file()
     assert (BUNDLE / "ffmpeg" / "ffprobe.exe").is_file()
     assert (BUNDLE / "whisper" / "whisper-cli.exe").is_file()
+
+
+def test_installer_never_uses_windows_script_host():
+    """Windows 11 24H2 disables VBScript by default.
+
+    A shortcut that runs ``wscript.exe "ABI Karaoke.vbs"`` does nothing at all
+    when clicked, which is indistinguishable from a broken install.  The
+    installer must launch pythonw.exe directly instead.
+    """
+    script = (ROOT / "installer" / "ABIKaraoke.nsi").read_text(encoding="utf-8")
+    lowered = script.lower()
+    assert "wscript" not in lowered
+    assert "pythonw.exe" in lowered
+    assert "-m abikaraoke gui" in script
+
+
+def test_entry_point_reports_fatal_errors_visibly():
+    """pythonw.exe has no console, so a crash must show a native dialog."""
+    source = (ROOT / "abikaraoke" / "__main__.py").read_text(encoding="utf-8")
+    assert "MessageBoxW" in source
+    assert "_attach_log" in source
