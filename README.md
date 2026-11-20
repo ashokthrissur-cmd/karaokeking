@@ -268,3 +268,9 @@ GitHub Actions does this automatically on every push and pull request; see
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+> **CI note:** the GitHub App used for this branch is not allowed to create
+> files under `.github/workflows/`. The ready-to-run workflow is committed at
+> [`ci/windows-ci.yml`](ci/windows-ci.yml); a maintainer only needs to move it
+> to `.github/workflows/windows-ci.yml` (or paste it in the Actions tab) to
+> enable the Windows build.
