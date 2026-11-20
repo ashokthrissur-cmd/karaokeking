@@ -1,0 +1,19 @@
+ABI Karaoke 1.0 — before you start
+==================================
+
+ABI Karaoke needs FFmpeg to read audio and render video.
+
+1. Download a full FFmpeg build (gyan.dev or BtbN, "release-full").
+2. Unzip it, then either:
+   - add its bin folder to PATH, or
+   - set ABI_FFMPEG and ABI_FFPROBE to the two .exe paths.
+
+Verify in the app: sidebar -> More -> "Re-run capability check".
+FFmpeg and FFprobe must both show [OK].
+
+Optional, for the best quality:
+  pip install demucs faster-whisper
+
+Without Demucs, ABI Karaoke uses a fast center-cancel separator.
+Without Whisper, it uses Smart Sync (vocal-energy timing).
+Both fallbacks work; they are labelled honestly in the UI.
