@@ -1,0 +1,6 @@
+# Core engine has no third-party dependencies (stdlib only).
+# Desktop UI:
+PySide6>=6.5
+
+# Optional AI backends (install for best quality):
+#   pip install -r requirements-ai.txt

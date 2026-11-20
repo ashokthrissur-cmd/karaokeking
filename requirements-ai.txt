@@ -1,0 +1,10 @@
+# Best-quality vocal removal (PyTorch; CPU or CUDA).
+demucs>=4.0.1
+
+# Word-level transcription used by AI Sync.
+faster-whisper>=1.0.0
+
+# Note: whisper.cpp is also supported as a lighter alternative.
+# Point ABI Karaoke at whisper-cli and a ggml model in Settings / env vars:
+#   ABI_WHISPER_CLI=C:\tools\whisper-cli.exe
+#   ABI_WHISPER_MODEL=C:\tools\ggml-base.bin

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "abikaraoke"
+version = "1.0.0"
+description = "Reliable karaoke video maker: vocal removal, LRCLIB lyrics, AI word-level sync, ASS rendering"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "ABI Karaoke contributors" }]
+keywords = ["karaoke", "demucs", "whisper", "lrclib", "ffmpeg", "ass"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Multimedia :: Video",
+  "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = []
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.5"]
+ai = ["faster-whisper>=1.0", "demucs>=4.0"]
+dev = ["pytest>=8", "pytest-timeout>=2.2", "pyinstaller>=6.0"]
+
+[project.scripts]
+abikaraoke = "abikaraoke.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ashokthrissur-cmd/karaokeking"
+Issues = "https://github.com/ashokthrissur-cmd/karaokeking/issues"
+
+[tool.setuptools]
+packages = ["abikaraoke"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+timeout = 300
+filterwarnings = ["ignore::DeprecationWarning"]

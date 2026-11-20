@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+publish/
+*.egg-info/
+*.spec.bak
+outputs/
+testdata/*.mp4
+testdata/*.wav
+testdata/*.png
+testdata/*.ass
+.DS_Store
